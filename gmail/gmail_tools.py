@@ -2119,3 +2119,73 @@ async def batch_modify_gmail_message_labels(
         actions.append(f"Removed labels: {', '.join(remove_label_ids)}")
 
     return f"Labels updated for {len(message_ids)} messages: {'; '.join(actions)}"
+
+
+@server.tool()
+@handle_http_errors("apply_gmail_label", service_type="gmail")
+@require_google_service("gmail", GMAIL_MODIFY_SCOPE)
+async def apply_gmail_label(
+    service,
+    user_google_email: str,
+    message_id: str,
+    label_id: str,
+) -> str:
+    """
+    Adds a single label to a single Gmail message. Use this instead of
+    modify_gmail_message_labels when the client serializes arrays as JSON
+    strings (e.g. Claude Desktop / Cowork mode).
+
+    Args:
+        user_google_email (str): The user's Google email address. Required.
+        message_id (str): The ID of the message to modify.
+        label_id (str): The label ID to add to the message.
+
+    Returns:
+        str: Confirmation message of the label applied to the message.
+    """
+    logger.info(
+        f"[apply_gmail_label] Invoked. Email: '{user_google_email}', Message ID: '{message_id}', Label ID: '{label_id}'"
+    )
+
+    body = {"addLabelIds": [label_id]}
+
+    await asyncio.to_thread(
+        service.users().messages().modify(userId="me", id=message_id, body=body).execute
+    )
+
+    return f"Message labels updated successfully!\nMessage ID: {message_id}\nAdded labels: {label_id}"
+
+
+@server.tool()
+@handle_http_errors("remove_gmail_label", service_type="gmail")
+@require_google_service("gmail", GMAIL_MODIFY_SCOPE)
+async def remove_gmail_label(
+    service,
+    user_google_email: str,
+    message_id: str,
+    label_id: str,
+) -> str:
+    """
+    Removes a single label from a single Gmail message. Use this instead of
+    modify_gmail_message_labels when the client serializes arrays as JSON
+    strings (e.g. Claude Desktop / Cowork mode).
+
+    Args:
+        user_google_email (str): The user's Google email address. Required.
+        message_id (str): The ID of the message to modify.
+        label_id (str): The label ID to remove from the message.
+
+    Returns:
+        str: Confirmation message of the label removed from the message.
+    """
+    logger.info(
+        f"[remove_gmail_label] Invoked. Email: '{user_google_email}', Message ID: '{message_id}', Label ID: '{label_id}'"
+    )
+
+    body = {"removeLabelIds": [label_id]}
+
+    await asyncio.to_thread(
+        service.users().messages().modify(userId="me", id=message_id, body=body).execute
+    )
+
+    return f"Message labels updated successfully!\nMessage ID: {message_id}\nRemoved labels: {label_id}"
