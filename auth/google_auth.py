@@ -1272,24 +1272,38 @@ def get_credentials(
                     )
                     return None
 
-                if persist_succeeded or is_stateless_mode():
-                    # Also update OAuth21SessionStore
-                    store = get_oauth21_session_store()
-                    store.store_session(
-                        user_email=user_google_email,
-                        access_token=credentials.token,
-                        refresh_token=credentials.refresh_token,
-                        token_uri=credentials.token_uri,
-                        client_id=credentials.client_id,
-                        client_secret=credentials.client_secret,
-                        scopes=credentials.scopes,
-                        expiry=credentials.expiry,
-                        mcp_session_id=session_id,
-                        issuer="https://accounts.google.com",  # Add issuer for Google tokens
-                    )
+                if (persist_succeeded or is_stateless_mode()) and not skip_session_cache:
+                    # Also update OAuth21SessionStore, but only when this MCP session is
+                    # not already bound to another user. In multi-account use (several
+                    # mailboxes through one session), binding would raise and wrongly
+                    # discard a token that was just refreshed successfully.
+                    try:
+                        store = get_oauth21_session_store()
+                        store.store_session(
+                            user_email=user_google_email,
+                            access_token=credentials.token,
+                            refresh_token=credentials.refresh_token,
+                            token_uri=credentials.token_uri,
+                            client_id=credentials.client_id,
+                            client_secret=credentials.client_secret,
+                            scopes=credentials.scopes,
+                            expiry=credentials.expiry,
+                            mcp_session_id=session_id,
+                            issuer="https://accounts.google.com",  # Add issuer for Google tokens
+                        )
+                    except Exception as store_error:
+                        # Session-store sync is best effort: the refreshed token is valid
+                        # and already persisted to the credential store.
+                        logger.warning(
+                            f"[get_credentials] Could not sync refreshed credentials to session store: {store_error}. User: '{user_google_email}', Session: '{session_id}'"
+                        )
 
-            if session_id and (persist_succeeded or is_stateless_mode()):
-                # Update session cache if it was the source or is active
+            # Update session cache only if this session belongs to the requested user
+            if (
+                session_id
+                and not skip_session_cache
+                and (persist_succeeded or is_stateless_mode())
+            ):
                 save_credentials_to_session(session_id, credentials)
         except RefreshError as e:
             logger.warning(
